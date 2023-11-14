@@ -1,0 +1,220 @@
+---
+title: "Météo Montpellier"
+---
+---
+title: "Perso"
+---
+
+La météo de Montpellier.
+
+Pour visiter ma page github  <https://quarto.org/docs/websites>.
+```{python}
+import numpy as np
+
+import requests
+import datetime
+import pooch
+import PIL as Image
+import statistics
+from dateutil.relativedelta import relativedelta
+
+# initialisation des dates de debut et fin d'extraction de données
+date_debut = datetime.datetime.now() - relativedelta(days=2)
+date_fin = date_debut + relativedelta(days=6)
+# formatage des dates pour importer le bon URL
+date_debut_formattee = date_debut.strftime('%Y-%m-%d') 
+date_fin_formattee = date_fin.strftime('%Y-%m-%d')  
+
+# copie de l'URL du site open-meteo avec les differents critères qui nous interessent
+url = f"https://api.open-meteo.com/v1/meteofrance?latitude=43.6109&longitude=3.8763&hourly=temperature_2m,weathercode,precipitation&daily=weathercode,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,precipitation_sum&timezone=Europe%2FLondon&start_date={date_debut_formattee}&end_date={date_fin_formattee}"
+
+# récuperation des données
+response = requests.get(url)
+data = response.json()
+
+
+# initialisation des tableaux de données que nous allons utiliser
+temp = data["hourly"]["temperature_2m"]
+precipitation = data["daily"]["precipitation_sum"]
+precipitation_h = data["hourly"]["precipitation"]
+wind = data["daily"]["wind_speed_10m_max"]
+tempmin = data["daily"]["temperature_2m_min"]
+tempmax = data["daily"]["temperature_2m_max"]
+codeimage = data["hourly"]["weathercode"]
+codeimagetot = data["daily"]["weathercode"]
+
+
+def index(i):
+    """
+    Fonction permettant d'obtenir le nom du jour des jours de la semaine automatiquement, correspond à la première ligne du tableau.
+    """
+    jours_semaine = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    return jours_semaine[(datetime.datetime.now().weekday() + i) % 7]
+
+def date(i):
+    
+    date = datetime.datetime.now() + relativedelta(days=i)
+    return f"{date.day}-{date.month}-{date.year}"
+
+
+def imgcodeday(i):
+    """
+    Association de chaques codes WBO à un pictogramme le correspondant. Retourne le chemin d'accès au pictogramme par une chaine de caractères. Version daily.
+    """
+    match codeimagetot[i]:
+        case 0:
+            return "icon/wi-day-sunny.svg"
+        case 1:
+            return "icon/wi-day-sunny-overcast.svg"
+        case 2:
+            return "icon/wi-day-cloudy.svg"
+        case 3:
+            return "icon/wi-cloud.svg"
+        case 45 | 48:
+            return "icon/wi-fog.svg"
+        case 51 | 53 | 55 | 56 | 57:
+            return "icon/wi-sprinkle.svg"
+        case 61 | 81 | 82:
+            return "icon/wi-showers.svg"
+        case 63:
+            return "icon/wi-rain-wind.svg"
+        case 65 | 66 | 67:
+            return "icon/wi-rain.svg"
+        case 71 | 73 | 75 | 85 | 86:
+            return "icon/wi-snow.svg"
+        case 95 | 96:
+            return "icon/wi-storm-showers.svg"
+        case 99:
+            return "icon/wi-thunderstorm.svg"
+        case _:  # si on a pas encore d'informations j'ai juste mis un cercle
+            return "icon/wi-moon-new.svg"
+
+def couleur(temp):
+    """
+    Associe une couleur en fonction de la température sous le format RGB.
+    """
+    if temp == None:
+        return "rgb(255, 255, 255,0.5)"
+    if temp <= 0:
+        return "rgb(102, 183, 213,0.5)"
+    if 0 < temp <= 5:
+        return "rgb(85, 215, 195,0.5)"
+    if 5 < temp <= 10:
+        return "rgb(65, 220, 119,0.5)"
+    if 10 < temp <= 15:
+        return "rgb(82, 226, 38,0.5)"
+    if 15 < temp <= 20:
+        return "rgb(155, 227, 22,0.5)"
+    if 20 < temp <= 25:
+        return "rgb(216, 186, 12,0.5)"
+    if 25 < temp <= 30:
+        return "rgb(211, 113, 7,0.5)"
+    if 30 < temp <= 35:
+        return "rgb(204, 61, 4,0.5)"
+    if 35 < temp:
+        return "rgb(201, 25, 2,0.5)"
+    else:
+        return "rgb(188, 212,204,0.5)"
+
+precipitationd = 0 #pour gérer les données pas encore enregistrées
+for i in range(len(precipitation_h )):
+    if precipitation_h [i] == None:
+       precipitation_h [i] = 0
+for i in range(24):
+    precipitationd += precipitation_h[-24+i] #somme de la pluie des 24 heures du dernier jour
+
+
+def goutte(i):
+    """
+    Retourne une image sous format html correspondant a l'intensité des précipitations.
+    """
+    if precipitation[i] != float:
+        return ""
+    if 0 < precipitation[i] <= 2:
+        return '<img src="icon/wi-raindrop.svg" width="20" height="20" />'
+    elif 2 < precipitation[i]:
+        return '<img src="icon/wi-raindrops.svg" width="40" height="40" />'
+    else:
+        return ""                   
+from IPython.display import HTML
+from tabulate import tabulate
+
+# création du tableau en HTML pour pouvoir mettre les images et des couleurs
+res = f"""
+<table class= "table1-style">
+    <thead>
+    <tr>  
+        <th  style="border-top-left-radius : 20px 20px"> Days </th>
+        <th>  {index(-2)} <br> <small> {date(-2)} </small></th>
+        <th>  {index(-1)} <br> <small>{date(-1)}</small></th>
+        <th style="border-top:3px solid rgb(85, 215, 195,0.5);border-right:3px solid rgb(85, 215, 195,0.5);border-left:3px solid rgb(85, 215, 195,0.5)">   <a class=lien href = plus.qmd style="text-decoration:none"> Today <br> <small>{date(0)}</small> </a></th>
+        <th>  {index(1)} <br> <small>{date(1)}</small></th>
+        <th>  {index(2)} <br> <small>{date(2)}</small></th>
+        <th>  {index(3)} <br> <small>{date(3)}</small></th>
+        <th  style="border-top-right-radius : 20px 20px" >  {index(4)} <br> <small>{date(4)}</small></th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr> 
+        <td>  </td>
+        <td> <img src={imgcodeday(0)} width="50"
+  height="50" /> </td>
+        <td> <img src={imgcodeday(1)} width="50"
+  height="50" /> </td>
+        <td style="border-right:3px solid rgb(85, 215, 195,0.5);border-left:3px solid rgb(85, 215, 195,0.5)"> <img src={imgcodeday(2)} width="50"
+  height="50" /> </td>
+        <td> <img src={imgcodeday(3)} width="50"
+  height="50" /> </td>
+        <td> <img src={imgcodeday(4)} width="50"
+  height="50" /> </td>
+        <td> <img src={imgcodeday(5)} width="50"
+  height="50" /> </td>
+        <td> <img src={imgcodeday(6)} width="50"
+  height="50" /> </td>
+    </tr>
+    <tr> 
+        <td> Temp Max (°C) </td>
+        <td style =" background-color : {couleur(tempmax[0])}; font-weight: bold;" > {tempmax[0]}°C </td>
+        <td style =" background-color : {couleur(tempmax[1])};font-weight: bold;" > {tempmax[1]}°C </td>
+        <td style =" background-color : {couleur(tempmax[2])};font-weight: bold;border-right:3px solid rgb(85, 215, 195,0.5);border-left:3px solid rgb(85, 215, 195,0.5)" > {tempmax[2]}°C </td>
+        <td style =" background-color : {couleur(tempmax[3])};font-weight: bold;" > {tempmax[3]}°C </td>
+        <td style =" background-color : {couleur(tempmax[4])};font-weight: bold;" > {tempmax[4]}°C </td>
+        <td style =" background-color : {couleur(tempmax[5])};font-weight: bold;" > {tempmax[5]}°C </td>
+        <td style =" background-color : {couleur(tempmax[6])};font-weight: bold;" > {tempmax[6]}°C </td>
+    </tr>
+    <tr > 
+        <td>  Temp Min (°C) </td>
+        <td style =" background-color : {couleur(tempmin[0])};font-weight: bold;" > {tempmin[0]}°C </td>
+        <td style =" background-color : {couleur(tempmin[1])};font-weight: bold;" > {tempmin[1]}°C </td>
+        <td style =" background-color : {couleur(tempmin[2])};font-weight: bold;border-right:3px solid rgb(85, 215, 195,0.5);border-left:3px solid rgb(85, 215, 195,0.5)" > {tempmin[2]}°C </td>
+        <td style =" background-color : {couleur(tempmin[3])};font-weight: bold;" > {tempmin[3]}°C </td>
+        <td style =" background-color : {couleur(tempmin[4])};font-weight: bold;" > {tempmin[4]}°C </td>
+        <td style =" background-color : {couleur(tempmin[5])};font-weight: bold;" > {tempmin[5]}°C </td>
+        <td style =" background-color : {couleur(tempmin[6])};font-weight: bold;" > {tempmin[6]}°C </td>
+    </tr>
+    <tr> 
+        <td> Wind Speed Max  </td>
+        <td> {int(wind[0])} km/h </td>
+        <td> {int(wind[1])} km/h </td>
+        <td style="border-right:3px solid rgb(85, 215, 195,0.5);border-left:3px solid rgb(85, 215, 195,0.5)"> {int(wind[2])} km/h </td>
+        <td> {int(wind[3])} km/h </td>
+        <td> {int(wind[4])} km/h </td>
+        <td> {int(wind[5])} km/h </td>
+        <td> {int(wind[6])} km/h </td>
+    </tr>
+    <tr> 
+        <td style="border-bottom-left-radius : 20px 20px"> Precipitation </td>
+        <td> {goutte(0)} {precipitation[0]} mm </td>
+        <td> {goutte(1)} {precipitation [1]} mm </td>
+        <td style="border-bottom:3px solid rgb(85, 215, 195,0.5);border-right:3px solid rgb(85, 215, 195,0.5);border-left:3px solid rgb(85, 215, 195,0.5)"> {goutte(2)} {precipitation[2]} mm </td>
+        <td> {goutte(3)} {precipitation[3]} mm </td>
+        <td> {goutte(4)} {precipitation[4]} mm </td>
+        <td> {goutte(5)} {precipitation[5]} mm </td>
+        <td style="border-bottom-right-radius : 20px 20px"> {goutte(6)} {precipitationd} mm </td>
+    </tr>
+    </tbody>
+
+</table>
+"""
+HTML(res)
+```
